@@ -1,0 +1,43 @@
+# Binaries for programs
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*_test
+
+# Compiled Go binaries
+# These are typically named after the package or module
+# You might need to adjust this if your build process creates differently named binaries
+# For example, if you build in a 'bin' directory:
+# bin/
+
+# Dependency directories
+# Vendor directory for Go modules
+vendor/
+
+# Go module cache
+# This directory is created by 'go mod download' and contains downloaded modules
+# It's usually located in your user's Go path, but can be in the project if configured
+# For example, if you have a local module cache:
+# pkg/mod/
+
+# Editor and IDE specific files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Environment variables
+.env
+.env.*
+
+# Temporary files
+*~
+#*#
+.#*
+
