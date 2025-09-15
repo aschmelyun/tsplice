@@ -347,10 +347,7 @@ func compileVideoSegments(inputFile string, items []list.Item) (string, error) {
 	outputFile := fmt.Sprintf("%s_compiled.mp4", basename)
 
 	// Use the same directory as input file
-	inputDir := filepath.Dir(inputFile)
-	if inputDir != "." {
-		outputFile = filepath.Join(inputDir, outputFile)
-	}
+	outputFile = filepath.Join(filepath.Dir(inputFile), outputFile)
 
 	// Build ffmpeg filter_complex command for multiple segments
 	var filterParts []string
@@ -361,15 +358,18 @@ func compileVideoSegments(inputFile string, items []list.Item) (string, error) {
 
 	selectFilter := strings.Join(filterParts, "+")
 
-	command := fmt.Sprintf(
-		`ffmpeg -i "%s" -vf "select='%s',setpts=N/FRAME_RATE/TB" -af "aselect='%s',asetpts=N/SR/TB" "%s"`,
+	cmd := exec.Command(
+		"ffmpeg",
+		"-y",
+		"-i",
 		inputFile,
-		selectFilter,
-		selectFilter,
+		"-vf",
+		fmt.Sprintf("select='%s',setpts=N/FRAME_RATE/TB", selectFilter),
+		"-af",
+		fmt.Sprintf("aselect='%s',asetpts=N/SR/TB", selectFilter),
 		outputFile,
 	)
 
-	cmd := exec.Command(command)
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("failed to compile video segments: %w", err)
 	}
