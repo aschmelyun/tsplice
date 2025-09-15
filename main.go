@@ -19,7 +19,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Messages
 type audioExtractedMsg struct {
 	audioFile string
 }
@@ -33,13 +32,16 @@ type errorMsg struct {
 	err error
 }
 
+type videoCompilationDoneMsg struct {
+	outputFile string
+}
+
 type TranscriptItem struct {
 	StartTime string
 	EndTime   string
 	Text      string
 }
 
-// Model represents the application state
 type model struct {
 	width           int
 	height          int
@@ -255,38 +257,6 @@ func parseVTT(vttContent string) ([]TranscriptItem, error) {
 	return transcriptItems, nil
 }
 
-// formatTimestamp converts HH:MM:SS.mmm to MM:SS.XX format
-func formatTimestamp(timestamp string) string {
-	parts := strings.Split(timestamp, ":")
-	if len(parts) != 3 {
-		return timestamp
-	}
-
-	secParts := strings.Split(parts[2], ".")
-	if len(secParts) != 2 {
-		return timestamp
-	}
-
-	milliseconds := secParts[1]
-	if len(milliseconds) >= 3 {
-		hundredths := milliseconds[:2]
-		if len(milliseconds) > 2 && milliseconds[2] >= '5' {
-			val := 0
-			fmt.Sscanf(hundredths, "%d", &val)
-			val++
-			if val >= 100 {
-				val = 99
-			}
-			hundredths = fmt.Sprintf("%02d", val)
-		}
-		return fmt.Sprintf("%s:%s.%s", parts[1], secParts[0], hundredths)
-	} else {
-		paddedMs := fmt.Sprintf("%-3s", milliseconds)
-		hundredths := paddedMs[:2]
-		return fmt.Sprintf("%s:%s.%s", parts[1], secParts[0], hundredths)
-	}
-}
-
 // previewVideo plays video segment using mpv
 func previewVideo(inputFile, startTime, endTime string) {
 	cmd := exec.Command("mpv", "--start="+startTime, "--end="+endTime, inputFile)
@@ -330,6 +300,97 @@ func addSecondsToTimestamp(timestamp string, seconds int) string {
 	return fmt.Sprintf("%s:%s:%02d.%s", parts[0], parts[1], newSec, secParts[1])
 }
 
+func compileVideoCmd(inputFile string, items []list.Item) tea.Cmd {
+	return func() tea.Msg {
+		outputFile, err := compileVideoSegments(inputFile, items)
+		if err != nil {
+			return errorMsg{err: err}
+		}
+		return videoCompilationDoneMsg{outputFile: outputFile}
+	}
+}
+
+func compileVideoSegments(inputFile string, items []list.Item) (string, error) {
+	// Collect selected segments
+	var segments []struct {
+		start, end float64
+	}
+
+	for _, listItem := range items {
+		if i, ok := listItem.(item); ok && i.selected {
+			timestamps := strings.Split(i.timestamp, " - ")
+			if len(timestamps) == 2 {
+				// Convert MM:SS.XX back to HH:MM:SS.mmm format for ffmpeg
+				start, err := parseTimeToSeconds(timestamps[0])
+				if err != nil {
+					return "", fmt.Errorf("could not parse start time '%s': %w", timestamps[0], err)
+				}
+
+				end, err := parseTimeToSeconds(timestamps[1])
+				if err != nil {
+					return "", fmt.Errorf("could not parse end time '%s': %w", timestamps[1], err)
+				}
+
+				segments = append(segments, struct {
+					start, end float64
+				}{start: start, end: end})
+			}
+		}
+	}
+
+	if len(segments) == 0 {
+		return "", fmt.Errorf("no segments selected")
+	}
+
+	// Generate output filename
+	basename := strings.TrimSuffix(filepath.Base(inputFile), filepath.Ext(inputFile))
+	outputFile := fmt.Sprintf("%s_compiled.mp4", basename)
+
+	// Use the same directory as input file
+	inputDir := filepath.Dir(inputFile)
+	if inputDir != "." {
+		outputFile = filepath.Join(inputDir, outputFile)
+	}
+
+	// Build ffmpeg filter_complex command for multiple segments
+	var filterParts []string
+
+	for _, segment := range segments {
+		filterParts = append(filterParts, fmt.Sprintf("between(t,%.3f,%.3f)", segment.start, segment.end))
+	}
+
+	selectFilter := strings.Join(filterParts, "+")
+
+	command := fmt.Sprintf(
+		`ffmpeg -i "%s" -vf "select='%s',setpts=N/FRAME_RATE/TB" -af "aselect='%s',asetpts=N/SR/TB" "%s"`,
+		inputFile,
+		selectFilter,
+		selectFilter,
+		outputFile,
+	)
+
+	cmd := exec.Command(command)
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to compile video segments: %w", err)
+	}
+
+	return outputFile, nil
+}
+
+// converts a "HH:MM:SS.ms" string into total seconds.
+func parseTimeToSeconds(timeStr string) (float64, error) {
+	var hours, minutes int
+	var seconds float64
+
+	_, err := fmt.Sscanf(timeStr, "%d:%d:%f", &hours, &minutes, &seconds)
+	if err != nil {
+		return 0, err
+	}
+
+	totalSeconds := float64(hours*3600) + float64(minutes*60) + seconds
+	return totalSeconds, nil
+}
+
 // Update handles messages and updates the model
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -365,6 +426,28 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, nil
+
+		case "c":
+			if !m.loading && len(m.list.Items()) > 0 {
+				// Check if any items are selected
+				items := m.list.Items()
+				hasSelected := false
+				for _, listItem := range items {
+					if i, ok := listItem.(item); ok && i.selected {
+						hasSelected = true
+						break
+					}
+				}
+				if hasSelected {
+					m.loading = true
+					m.loadingMsg = "Compiling video segments with ffmpeg..."
+					return m, tea.Batch(
+						m.spinner.Tick,
+						compileVideoCmd(m.inputFile, items),
+					)
+				}
+			}
+			return m, nil
 		}
 
 		// If not loading, pass to list
@@ -396,7 +479,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for i, transcriptItem := range msg.transcriptItems {
 			items[i] = item{
 				title:     transcriptItem.Text,
-				timestamp: formatTimestamp(transcriptItem.StartTime) + " - " + formatTimestamp(transcriptItem.EndTime),
+				timestamp: transcriptItem.StartTime + " - " + transcriptItem.EndTime,
 				selected:  false,
 			}
 		}
@@ -408,7 +491,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		l.SetFilteringEnabled(true)
 		l.SetShowHelp(true)
 		l.SetShowPagination(false)
-		
+
 		// Add custom key bindings for help
 		l.AdditionalShortHelpKeys = func() []key.Binding {
 			return []key.Binding{
@@ -416,11 +499,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					key.WithKeys("p"),
 					key.WithHelp("p", "preview"),
 				),
+				key.NewBinding(
+					key.WithKeys("c"),
+					key.WithHelp("c", "compile"),
+				),
 			}
 		}
-		
+
 		m.list = l
 
+		return m, nil
+
+	case videoCompilationDoneMsg:
+		m.loading = false
+		m.errorMsg = fmt.Sprintf("✓ Video compiled successfully: %s", msg.outputFile)
 		return m, nil
 
 	case errorMsg:
@@ -468,9 +560,22 @@ func (m model) View() string {
 
 	// Content area
 	if m.errorMsg != "" {
-		// Show error
-		errorText := fmt.Sprintf("Error: %s", m.errorMsg)
-		return title + "\n\n" + errorStyle.Render(errorText) + "\n\nPress 'q' to quit"
+		// Show error or success message
+		var msgStyle lipgloss.Style
+		var msgText string
+		if strings.HasPrefix(m.errorMsg, "✓") {
+			// Success message
+			msgStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("10")).
+				Align(lipgloss.Center).
+				Width(m.width)
+			msgText = m.errorMsg
+		} else {
+			// Error message
+			msgStyle = errorStyle
+			msgText = fmt.Sprintf("Error: %s", m.errorMsg)
+		}
+		return title + "\n\n" + msgStyle.Render(msgText) + "\n\nPress 'q' to quit"
 	} else if m.loading {
 		// Show spinner while loading
 		loadingMsg := m.loadingMsg
@@ -488,8 +593,8 @@ func (m model) View() string {
 		// Add header with total time info
 		var header string
 		if len(m.transcriptItems) > 0 {
-			firstStart := formatTimestamp(m.transcriptItems[0].StartTime)
-			lastEnd := formatTimestamp(m.transcriptItems[len(m.transcriptItems)-1].EndTime)
+			firstStart := m.transcriptItems[0].StartTime
+			lastEnd := m.transcriptItems[len(m.transcriptItems)-1].EndTime
 			header = fmt.Sprintf("  Start: %s | End: %s\n", firstStart, lastEnd)
 		}
 
@@ -547,7 +652,7 @@ func main() {
 		for i, transcriptItem := range transcriptItems {
 			items[i] = item{
 				title:     transcriptItem.Text,
-				timestamp: formatTimestamp(transcriptItem.StartTime) + " - " + formatTimestamp(transcriptItem.EndTime),
+				timestamp: transcriptItem.StartTime + " - " + transcriptItem.EndTime,
 				selected:  false,
 			}
 		}
@@ -559,13 +664,17 @@ func main() {
 		l.SetFilteringEnabled(true)
 		l.SetShowHelp(true)
 		l.SetShowPagination(false)
-		
+
 		// Add custom key bindings for help
 		l.AdditionalShortHelpKeys = func() []key.Binding {
 			return []key.Binding{
 				key.NewBinding(
 					key.WithKeys("p"),
 					key.WithHelp("p", "preview"),
+				),
+				key.NewBinding(
+					key.WithKeys("c"),
+					key.WithHelp("c", "compile"),
 				),
 			}
 		}
