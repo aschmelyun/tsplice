@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -54,7 +55,6 @@ type model struct {
 	statuses        []string
 }
 
-// List item for transcripts
 type item struct {
 	title     string
 	timestamp string
@@ -84,7 +84,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 
 	timestampStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).PaddingLeft(2)
 	itemStyle := lipgloss.NewStyle().PaddingLeft(2)
-	selectedItemStyle := lipgloss.NewStyle().PaddingLeft(0).Foreground(lipgloss.Color("14"))
+	selectedItemStyle := lipgloss.NewStyle().PaddingLeft(0).Foreground(lipgloss.Color("3"))
 
 	checkbox := "☐"
 	if i.selected {
@@ -117,7 +117,6 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
-// extractAudioCmd extracts audio from video file
 func extractAudioCmd(inputFile string) tea.Cmd {
 	return func() tea.Msg {
 		audioFile, err := extractAudio(inputFile)
@@ -128,7 +127,6 @@ func extractAudioCmd(inputFile string) tea.Cmd {
 	}
 }
 
-// transcribeAudioCmd sends audio to OpenAI Whisper API
 func transcribeAudioCmd(audioFile string) tea.Cmd {
 	return func() tea.Msg {
 		vttContent, err := transcribeWithOpenAI(audioFile)
@@ -141,21 +139,18 @@ func transcribeAudioCmd(audioFile string) tea.Cmd {
 			return errorMsg{err: err}
 		}
 
-		// Save VTT file
 		basename := strings.TrimSuffix(filepath.Base(audioFile), filepath.Ext(audioFile))
 		vttFile := basename + ".vtt"
 		if err := os.WriteFile(vttFile, []byte(vttContent), 0644); err != nil {
 			return errorMsg{err: err}
 		}
 
-		// Clean up audio file
 		os.Remove(audioFile)
 
 		return transcriptionDoneMsg{vttContent: vttContent, transcriptItems: transcriptItems}
 	}
 }
 
-// extractAudio extracts audio from video file using ffmpeg
 func extractAudio(inputFile string) (string, error) {
 	basename := strings.TrimSuffix(filepath.Base(inputFile), filepath.Ext(inputFile))
 	audioFile := basename + ".mp3"
@@ -168,7 +163,6 @@ func extractAudio(inputFile string) (string, error) {
 	return audioFile, nil
 }
 
-// transcribeWithOpenAI sends audio to OpenAI Whisper API
 func transcribeWithOpenAI(audioFile string) (string, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
@@ -228,7 +222,6 @@ func transcribeWithOpenAI(audioFile string) (string, error) {
 	return string(body), nil
 }
 
-// parseVTT parses VTT content into transcript items
 func parseVTT(vttContent string) ([]TranscriptItem, error) {
 	lines := strings.Split(vttContent, "\n")
 	var transcriptItems []TranscriptItem
@@ -263,13 +256,11 @@ func parseVTT(vttContent string) ([]TranscriptItem, error) {
 	return transcriptItems, nil
 }
 
-// previewVideo plays video segment using mpv
 func previewVideo(inputFile, startTime, endTime string) {
 	cmd := exec.Command("mpv", "--start="+startTime, "--end="+endTime, inputFile)
 	cmd.Run()
 }
 
-// getEndTime calculates end time for video preview
 func getEndTime(items []list.Item, currentIndex int) string {
 	if currentIndex+1 < len(items) {
 		if nextItem, ok := items[currentIndex+1].(item); ok {
@@ -283,7 +274,6 @@ func getEndTime(items []list.Item, currentIndex int) string {
 	return "00:00:10.000"
 }
 
-// addSecondsToTimestamp adds seconds to a timestamp
 func addSecondsToTimestamp(timestamp string, seconds int) string {
 	parts := strings.Split(timestamp, ":")
 	if len(parts) != 3 {
@@ -383,7 +373,6 @@ func compileVideoSegments(inputFile string, items []list.Item) (string, error) {
 	return outputFile, nil
 }
 
-// converts a "HH:MM:SS.ms" string into total seconds.
 func parseTimeToSeconds(timeStr string) (float64, error) {
 	var hours, minutes int
 	var seconds float64
@@ -397,7 +386,6 @@ func parseTimeToSeconds(timeStr string) (float64, error) {
 	return totalSeconds, nil
 }
 
-// Update handles messages and updates the model
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -533,7 +521,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the UI
 func (m model) View() string {
 	if m.quitting {
 		return strings.Join(m.statuses, "\n") + "\n"
@@ -591,9 +578,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Validate the file exists
 	inputFile := os.Args[1]
 	if _, err := os.Stat(inputFile); os.IsNotExist(err) {
 		fmt.Printf(BulletStyle.Render("└")+TextStyle.Render("Error: file '%s' does not exist.")+"\n", inputFile)
+		os.Exit(1)
+	}
+
+	// Validate the input file is a video file
+	validExtensions := []string{".mp4", ".avi", ".mov", ".mkv", ".m4v"}
+	fileExt := strings.ToLower(filepath.Ext(inputFile))
+
+	if !slices.Contains(validExtensions, fileExt) {
+		fmt.Printf(BulletStyle.Render("└")+TextStyle.Render("Error: file '%s' is not a valid video file.")+"\n", inputFile)
 		os.Exit(1)
 	}
 
