@@ -43,8 +43,6 @@ type TranscriptItem struct {
 }
 
 type model struct {
-	width           int
-	height          int
 	spinner         spinner.Model
 	loading         bool
 	loadingMsg      string
@@ -53,6 +51,7 @@ type model struct {
 	inputFile       string
 	errorMsg        string
 	transcriptItems []TranscriptItem
+	statuses        []string
 }
 
 // List item for transcripts
@@ -63,6 +62,13 @@ type item struct {
 }
 
 func (i item) FilterValue() string { return i.title }
+
+var (
+	TitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3"))
+	BulletStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).PaddingRight(1)
+	TextStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+	SpinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
+)
 
 // Item delegate for rendering list items
 type itemDelegate struct{}
@@ -457,20 +463,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 
-	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		if !m.loading {
-			m.list.SetWidth(msg.Width)
-			m.list.SetHeight(msg.Height - 4) // Leave space for title and footer
-		}
-		return m, nil
-
 	case audioExtractedMsg:
+		m.statuses = append(m.statuses, BulletStyle.Render("└")+TextStyle.Render("Audio extracted from ffmpeg"))
 		m.loadingMsg = "Transcribing with OpenAI Whisper..."
 		return m, transcribeAudioCmd(msg.audioFile)
 
 	case transcriptionDoneMsg:
+		m.statuses = append(m.statuses, BulletStyle.Render("└")+TextStyle.Render("Transcription finished and saved locally"))
 		m.loading = false
 		m.transcriptItems = msg.transcriptItems
 
@@ -485,7 +484,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Create and configure the list
-		l := list.New(items, itemDelegate{}, m.width, m.height-4)
+		l := list.New(items, itemDelegate{}, 32, 12)
 		l.SetShowTitle(false)
 		l.SetShowStatusBar(false)
 		l.SetFilteringEnabled(true)
@@ -511,11 +510,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case videoCompilationDoneMsg:
+		m.statuses = append(m.statuses, BulletStyle.Render("└")+TextStyle.Render("Video compiled successfully!"))
 		m.loading = false
 		m.errorMsg = fmt.Sprintf("✓ Video compiled successfully: %s", msg.outputFile)
 		return m, nil
 
 	case errorMsg:
+		m.statuses = append(m.statuses, BulletStyle.Render("└")+TextStyle.Render(msg.err.Error()))
 		m.loading = false
 		m.errorMsg = msg.err.Error()
 		return m, nil
@@ -535,28 +536,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the UI
 func (m model) View() string {
 	if m.quitting {
-		return ""
+		return strings.Join(m.statuses, "\n") + "\n"
 	}
 
-	// Create styles
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("86")).
-		Align(lipgloss.Center).
-		Width(m.width)
-
-	loadingStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241")).
-		Align(lipgloss.Center).
-		Width(m.width)
-
 	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("196")).
-		Align(lipgloss.Center).
-		Width(m.width)
-
-	// Title
-	title := titleStyle.Render("tsplice")
+		Foreground(lipgloss.Color("196"))
 
 	// Content area
 	if m.errorMsg != "" {
@@ -566,28 +550,24 @@ func (m model) View() string {
 		if strings.HasPrefix(m.errorMsg, "✓") {
 			// Success message
 			msgStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("10")).
-				Align(lipgloss.Center).
-				Width(m.width)
+				Foreground(lipgloss.Color("10"))
 			msgText = m.errorMsg
 		} else {
 			// Error message
 			msgStyle = errorStyle
 			msgText = fmt.Sprintf("Error: %s", m.errorMsg)
 		}
-		return title + "\n\n" + msgStyle.Render(msgText) + "\n\nPress 'q' to quit"
+		return strings.Join(m.statuses, "\n") + "\n" + msgStyle.Render(msgText) + "\n\nPress 'q' to quit"
 	} else if m.loading {
-		// Show spinner while loading
-		loadingMsg := m.loadingMsg
-		if loadingMsg == "" {
-			loadingMsg = "Extracting audio with ffmpeg..."
+		loadingText := fmt.Sprintf("%s %s", m.spinner.View(), m.loadingMsg)
+		if len(m.statuses) > 0 {
+			return strings.Join(m.statuses, "\n") + "\n" + loadingText
 		}
-		loadingText := fmt.Sprintf("%s %s", m.spinner.View(), loadingMsg)
-		return title + "\n\n" + loadingStyle.Render(loadingText)
+		return loadingText
 	} else {
 		// Show transcript list
 		if len(m.transcriptItems) == 0 {
-			return title + "\n\n" + "No transcript items found"
+			return strings.Join(m.statuses, "\n") + "\n" + "No transcript items found"
 		}
 
 		// Add header with total time info
@@ -598,20 +578,22 @@ func (m model) View() string {
 			header = fmt.Sprintf("  Start: %s | End: %s\n", firstStart, lastEnd)
 		}
 
-		return title + "\n" + header + m.list.View()
+		return strings.Join(m.statuses, "\n") + "\n" + header + m.list.View()
 	}
 }
 
 func main() {
+	fmt.Println(TitleStyle.Render("tsplice"))
+
 	// Validate command line arguments
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Usage: tsplice <input-file>\n")
+		fmt.Println(BulletStyle.Render("└") + TextStyle.Render("Usage: tsplice <input-file>"))
 		os.Exit(1)
 	}
 
 	inputFile := os.Args[1]
 	if _, err := os.Stat(inputFile); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "Error: File '%s' does not exist\n", inputFile)
+		fmt.Printf(BulletStyle.Render("└")+TextStyle.Render("Error: file '%s' does not exist.")+"\n", inputFile)
 		os.Exit(1)
 	}
 
@@ -622,7 +604,7 @@ func main() {
 	// Initialize spinner
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	s.Style = SpinnerStyle
 
 	// Create initial model
 	initialModel := model{
@@ -637,13 +619,13 @@ func main() {
 		// Load existing transcript
 		vttBytes, err := os.ReadFile(vttFile)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error reading existing VTT file: %v\n", err)
+			fmt.Fprintf(os.Stderr, BulletStyle.Render("└")+TextStyle.Render("There was a problem reading the existing VTT file: %v")+"\n", err)
 			os.Exit(1)
 		}
 
 		transcriptItems, err := parseVTT(string(vttBytes))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing VTT: %v\n", err)
+			fmt.Fprintf(os.Stderr, BulletStyle.Render("└")+TextStyle.Render("There was a problem parsing the existing VTT file: %v")+"\n", err)
 			os.Exit(1)
 		}
 
@@ -682,12 +664,12 @@ func main() {
 		initialModel.loading = false
 		initialModel.list = l
 		initialModel.transcriptItems = transcriptItems
+		initialModel.statuses = append(initialModel.statuses, BulletStyle.Render("└")+TextStyle.Render("Transcript already exists locally"))
 	}
 
 	// Create and run the program
 	p := tea.NewProgram(
 		initialModel,
-		tea.WithAltScreen(),
 	)
 
 	if _, err := p.Run(); err != nil {
