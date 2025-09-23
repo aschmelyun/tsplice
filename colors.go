@@ -6,6 +6,7 @@ var (
 	TitleStyle        = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3"))
 	BulletStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).PaddingRight(1)
 	TextStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
+	DimTextStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
 	SpinnerStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
 	TimestampStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).PaddingLeft(2)
 	ItemStyle         = lipgloss.NewStyle().PaddingLeft(2)

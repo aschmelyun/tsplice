@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -511,14 +512,43 @@ func (m model) View() string {
 func main() {
 	fmt.Println(TitleStyle.Render("tsplice"))
 
-	// Validate command line arguments
-	if len(os.Args) < 2 {
-		fmt.Println(BulletStyle.Render("└") + TextStyle.Render("Usage: tsplice <input-file>"))
-		os.Exit(1)
+	var lang string
+	var prompt string
+	var help bool
+
+	flag.StringVar(&lang, "lang", "auto", "Language for transcription (e.g. en, es, fr)")
+	flag.StringVar(&prompt, "prompt", "", "Optional prompt used to create a more accurate transcription")
+	flag.BoolVar(&help, "help", false, "Show usage info")
+	flag.Usage = func() {
+		fmt.Println(BulletStyle.Render("├") + TextStyle.Render("Usage: tsplice [options] <input-file>"))
+		fmt.Println(BulletStyle.Render("│"))
+		fmt.Println(BulletStyle.Render("├") + TextStyle.Render("Options:"))
+		fmt.Println(BulletStyle.Render("├────") + TextStyle.Render("--lang") + DimTextStyle.Render("    language for transcription (e.g. en, es, fr)"))
+		fmt.Println(BulletStyle.Render("├────") + TextStyle.Render("--prompt") + DimTextStyle.Render("  optional prompt used to create a more accurate transcription"))
+		fmt.Println(BulletStyle.Render("│"))
+		fmt.Println(BulletStyle.Render("└") + TextStyle.Render("Supported formats:") + DimTextStyle.Render(" .mp4, .avi, .mov, .mkv, .m4v"))
+	}
+
+	flag.Parse()
+
+	if help {
+		flag.Usage()
+		os.Exit(0)
+	}
+
+	args := flag.Args()
+	if len(args) != 1 {
+		flag.Usage()
+		os.Exit(0)
 	}
 
 	// Validate the file exists
-	inputFile := os.Args[1]
+	inputFile := args[0]
+	if inputFile == "help" {
+		flag.Usage()
+		os.Exit(0)
+	}
+
 	if _, err := os.Stat(inputFile); os.IsNotExist(err) {
 		fmt.Printf(BulletStyle.Render("└")+TextStyle.Render("Error: file '%s' does not exist.")+"\n", inputFile)
 		os.Exit(1)
