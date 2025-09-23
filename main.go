@@ -20,58 +20,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-type audioExtractedMsg struct {
-	audioFile string
-}
-
-type transcriptionDoneMsg struct {
-	vttContent      string
-	transcriptItems []TranscriptItem
-}
-
-type errorMsg struct {
-	err error
-}
-
-type videoCompilationDoneMsg struct {
-	outputFile string
-}
-
-type TranscriptItem struct {
-	StartTime string
-	EndTime   string
-	Text      string
-}
-
-type model struct {
-	spinner         spinner.Model
-	loading         bool
-	loadingMsg      string
-	list            list.Model
-	quitting        bool
-	inputFile       string
-	errorMsg        string
-	transcriptItems []TranscriptItem
-	statuses        []string
-}
-
-type item struct {
-	title     string
-	timestamp string
-	selected  bool
-}
-
 func (i item) FilterValue() string { return i.title }
-
-var (
-	TitleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("3"))
-	BulletStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).PaddingRight(1)
-	TextStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("15"))
-	SpinnerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-)
-
-// Item delegate for rendering list items
-type itemDelegate struct{}
 
 func (d itemDelegate) Height() int                             { return 2 }
 func (d itemDelegate) Spacing() int                            { return 0 }
@@ -82,22 +31,18 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		return
 	}
 
-	timestampStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")).PaddingLeft(2)
-	itemStyle := lipgloss.NewStyle().PaddingLeft(2)
-	selectedItemStyle := lipgloss.NewStyle().PaddingLeft(0).Foreground(lipgloss.Color("3"))
-
 	checkbox := "☐"
 	if i.selected {
 		checkbox = "◼"
 	}
 
-	timestampLine := timestampStyle.Render(i.timestamp)
+	timestampLine := TimestampStyle.Render(i.timestamp)
 	str := fmt.Sprintf("%s %s", checkbox, i.title)
 
-	fn := itemStyle.Render
+	fn := ItemStyle.Render
 	if index == m.Index() {
 		fn = func(s ...string) string {
-			return selectedItemStyle.Render("> " + strings.Join(s, " "))
+			return SelectedItemStyle.Render("> " + strings.Join(s, " "))
 		}
 	}
 
@@ -526,22 +471,16 @@ func (m model) View() string {
 		return strings.Join(m.statuses, "\n") + "\n"
 	}
 
-	errorStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("196"))
-
 	// Content area
 	if m.errorMsg != "" {
 		// Show error or success message
 		var msgStyle lipgloss.Style
 		var msgText string
 		if strings.HasPrefix(m.errorMsg, "✓") {
-			// Success message
-			msgStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("10"))
+			msgStyle = SuccessStyle
 			msgText = m.errorMsg
 		} else {
-			// Error message
-			msgStyle = errorStyle
+			msgStyle = ErrorStyle
 			msgText = fmt.Sprintf("Error: %s", m.errorMsg)
 		}
 		return strings.Join(m.statuses, "\n") + "\n" + msgStyle.Render(msgText) + "\n\nPress 'q' to quit"
