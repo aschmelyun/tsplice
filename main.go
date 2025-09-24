@@ -582,6 +582,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Check if OPENAI_API_KEY env variable is set, and if not, prompt for it
+	if os.Getenv("OPENAI_API_KEY") == "" {
+		fmt.Print(BulletStyle.Render("├") + TextStyle.Render("OPENAI_API_KEY not found. Please enter your API key: "))
+
+		var apiKey string
+		fmt.Scanln(&apiKey)
+
+		if apiKey == "" {
+			fmt.Println(BulletStyle.Render("└") + TextStyle.Render("API key is required to proceed."))
+			os.Exit(1)
+		}
+
+		os.Setenv("OPENAI_API_KEY", apiKey)
+		fmt.Println(BulletStyle.Render("├") + TextStyle.Render("API key set for this session."))
+	}
+
 	// Check if VTT file already exists
 	basename := strings.TrimSuffix(filepath.Base(inputFile), filepath.Ext(inputFile))
 	vttFile := basename + ".vtt"
