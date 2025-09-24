@@ -18,7 +18,6 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 func (i item) FilterValue() string { return i.title }
@@ -398,12 +397,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case audioExtractedMsg:
-		m.statuses = append(m.statuses, BulletStyle.Render("└")+TextStyle.Render("Audio extracted from ffmpeg"))
+		m.statuses = append(m.statuses, "Audio extracted from ffmpeg")
 		m.loadingMsg = "Transcribing with OpenAI Whisper..."
 		return m, transcribeAudioCmd(msg.audioFile)
 
 	case transcriptionDoneMsg:
-		m.statuses = append(m.statuses, BulletStyle.Render("└")+TextStyle.Render("Transcription finished and saved locally"))
+		m.statuses = append(m.statuses, "Transcription finished and saved locally")
 		m.loading = false
 		m.transcriptItems = msg.transcriptItems
 
@@ -444,13 +443,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case videoCompilationDoneMsg:
-		m.statuses = append(m.statuses, BulletStyle.Render("└")+TextStyle.Render("Video compiled successfully!"))
+		m.statuses = append(m.statuses, "Video compiled successfully!")
 		m.loading = false
 		m.errorMsg = fmt.Sprintf("✓ Video compiled successfully: %s", msg.outputFile)
 		return m, nil
 
 	case errorMsg:
-		m.statuses = append(m.statuses, BulletStyle.Render("└")+TextStyle.Render(msg.err.Error()))
+		m.statuses = append(m.statuses, msg.err.Error())
 		m.loading = false
 		m.errorMsg = msg.err.Error()
 		return m, nil
@@ -469,32 +468,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	if m.quitting {
-		return strings.Join(m.statuses, "\n") + "\n"
+		return styleOutput(m.statuses)
 	}
 
 	// Content area
 	if m.errorMsg != "" {
-		// Show error or success message
-		var msgStyle lipgloss.Style
-		var msgText string
-		if strings.HasPrefix(m.errorMsg, "✓") {
-			msgStyle = SuccessStyle
-			msgText = m.errorMsg
-		} else {
-			msgStyle = ErrorStyle
-			msgText = fmt.Sprintf("Error: %s", m.errorMsg)
-		}
-		return strings.Join(m.statuses, "\n") + "\n" + msgStyle.Render(msgText) + "\n\nPress 'q' to quit"
+		return styleOutput(m.statuses) + "\nPress 'q' to quit"
 	} else if m.loading {
 		loadingText := fmt.Sprintf("%s %s", m.spinner.View(), m.loadingMsg)
 		if len(m.statuses) > 0 {
-			return strings.Join(m.statuses, "\n") + "\n" + loadingText
+			return styleOutput(m.statuses) + loadingText
 		}
 		return loadingText
 	} else {
 		// Show transcript list
 		if len(m.transcriptItems) == 0 {
-			return strings.Join(m.statuses, "\n") + "\n" + "No transcript items found"
+			return styleOutput(m.statuses) + "No transcript items found"
 		}
 
 		// Add header with total time info
@@ -505,8 +494,20 @@ func (m model) View() string {
 			header = fmt.Sprintf("  Start: %s | End: %s\n", firstStart, lastEnd)
 		}
 
-		return strings.Join(m.statuses, "\n") + "\n" + header + m.list.View()
+		return styleOutput(m.statuses) + header + m.list.View()
 	}
+}
+
+func styleOutput(statuses []string) string {
+	var styledStatuses []string
+	for i, status := range statuses {
+		bullet := "├"
+		if i == len(statuses)-1 {
+			bullet = "└"
+		}
+		styledStatuses = append(styledStatuses, BulletStyle.Render(bullet)+TextStyle.Render(status))
+	}
+	return strings.Join(styledStatuses, "\n") + "\n"
 }
 
 func main() {
@@ -630,7 +631,7 @@ func main() {
 		initialModel.loading = false
 		initialModel.list = l
 		initialModel.transcriptItems = transcriptItems
-		initialModel.statuses = append(initialModel.statuses, BulletStyle.Render("└")+TextStyle.Render("Transcript already exists locally"))
+		initialModel.statuses = append(initialModel.statuses, "Transcript already exists locally")
 	}
 
 	// Create and run the program
