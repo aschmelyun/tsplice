@@ -510,8 +510,13 @@ func styleOutput(statuses []string) string {
 	return strings.Join(styledStatuses, "\n") + "\n"
 }
 
+func checkDependency(command string) bool {
+	_, err := exec.LookPath(command)
+	return err == nil
+}
+
 func main() {
-	fmt.Println(TitleStyle.Render("tsplice"))
+	fmt.Println(BulletStyle.Render("┌") + TitleStyle.Render("tsplice"))
 
 	var lang string
 	var prompt string
@@ -526,6 +531,19 @@ func main() {
 		fmt.Println(BulletStyle.Render("├") + TextStyle.Render("Options:"))
 		fmt.Println(BulletStyle.Render("├────") + TextStyle.Render("--lang") + DimTextStyle.Render("    language for transcription (e.g. en, es, fr)"))
 		fmt.Println(BulletStyle.Render("├────") + TextStyle.Render("--prompt") + DimTextStyle.Render("  optional prompt used to create a more accurate transcription"))
+		fmt.Println(BulletStyle.Render("│"))
+		fmt.Println(BulletStyle.Render("├") + TextStyle.Render("Requirements:"))
+
+		dependencies := []string{"ffmpeg", "mpv"}
+		for _, dependency := range dependencies {
+			status := "✔ installed"
+			if !checkDependency(dependency) {
+				status = "✗ missing"
+			}
+			spaces := strings.Repeat(" ", 10-len(dependency))
+			fmt.Println(BulletStyle.Render("├────") + TextStyle.Render(dependency) + DimTextStyle.Render(spaces+status))
+		}
+
 		fmt.Println(BulletStyle.Render("│"))
 		fmt.Println(BulletStyle.Render("└") + TextStyle.Render("Supported formats:") + DimTextStyle.Render(" .mp4, .avi, .mov, .mkv, .m4v"))
 	}
