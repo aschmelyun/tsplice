@@ -301,3 +301,15 @@ func checkDependency(command string) bool {
 	_, err := exec.LookPath(command)
 	return err == nil
 }
+
+func getSystemUser() string {
+	username := os.Getenv("USER")
+	if username == "" {
+		username = os.Getenv("USERNAME") // Windows fallback
+	}
+	if username == "" {
+		username = "anon" // Default fallback
+	}
+
+	return username
+}

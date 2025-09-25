@@ -8,11 +8,14 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/zalando/go-keyring"
+	"golang.org/x/term"
 )
 
 const VERSION = "1.0.0"
@@ -43,10 +46,9 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		}
 	}
 
-	fmt.Fprintf(w, "%s\n%s", timestampLine, fn(str))
+	fmt.Fprintf(w, "%s\n%s\n", timestampLine, fn(str))
 }
 
-// Init initializes the model and returns the initial command
 func (m model) Init() tea.Cmd {
 	if m.loading {
 		// Start the spinner and begin audio extraction
@@ -125,12 +127,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case audioExtractedMsg:
-		m.statuses = append(m.statuses, "Audio extracted from ffmpeg")
+		m.statuses = append(m.statuses, "Audio extracted from ffmpeg.")
 		m.loadingMsg = "Transcribing with OpenAI Whisper..."
 		return m, transcribeAudioCmd(msg.audioFile)
 
 	case transcriptionDoneMsg:
-		m.statuses = append(m.statuses, "Transcription finished and saved locally")
+		m.statuses = append(m.statuses, "Transcription finished and saved locally.")
 		m.loading = false
 		m.transcriptItems = msg.transcriptItems
 
@@ -145,7 +147,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// Create and configure the list
-		l := list.New(items, itemDelegate{}, 32, 12)
+		l := list.New(items, itemDelegate{}, 64, 16)
 		l.SetShowTitle(false)
 		l.SetShowStatusBar(false)
 		l.SetFilteringEnabled(true)
@@ -171,10 +173,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case videoCompilationDoneMsg:
-		m.statuses = append(m.statuses, "Video compiled successfully!")
+		m.statuses = append(m.statuses, "Video compiled successfully.")
+		m.statuses = append(m.statuses, "Saved output to "+msg.outputFile)
 		m.loading = false
-		m.errorMsg = fmt.Sprintf("✓ Video compiled successfully: %s", msg.outputFile)
-		return m, nil
+		m.quitting = true
+		return m, tea.Quit
 
 	case errorMsg:
 		m.statuses = append(m.statuses, msg.err.Error())
@@ -203,7 +206,7 @@ func (m model) View() string {
 	if m.errorMsg != "" {
 		return styleOutput(m.statuses) + "\nPress 'q' to quit"
 	} else if m.loading {
-		loadingText := fmt.Sprintf("%s %s", m.spinner.View(), m.loadingMsg)
+		loadingText := fmt.Sprintf("%s%s", m.spinner.View(), m.loadingMsg)
 		if len(m.statuses) > 0 {
 			return styleOutput(m.statuses) + loadingText
 		}
@@ -301,15 +304,42 @@ func main() {
 	}
 
 	// Check if OPENAI_API_KEY env variable is set, and if not, prompt for it
-	if os.Getenv("OPENAI_API_KEY") == "" {
-		fmt.Print(BulletStyle.Render("├") + TextStyle.Render("OPENAI_API_KEY not found. Please enter your API key: "))
+	username := getSystemUser()
 
-		var apiKey string
-		fmt.Scanln(&apiKey)
+	apiKey, err := keyring.Get("tsplice", username)
+	if err != nil {
+		if !strings.Contains(err.Error(), "secret not found") {
+			fmt.Println("Error reading API key:", err)
+			return
+		}
+	}
+
+	if apiKey != "" {
+		os.Setenv("OPENAI_API_KEY", apiKey)
+		fmt.Println(BulletStyle.Render("├") + TextStyle.Render("API key set for this session."))
+	}
+
+	if os.Getenv("OPENAI_API_KEY") == "" {
+		fmt.Print(BulletStyle.Render("├") + TextStyle.Render("OPENAI_API_KEY not found, enter one: "))
+
+		byteApiKey, err := term.ReadPassword(int(syscall.Stdin))
+		if err != nil {
+			fmt.Println("Error reading API key:", err)
+			return
+		}
+
+		fmt.Println()
+		apiKey := strings.TrimSpace(string(byteApiKey))
 
 		if apiKey == "" {
-			fmt.Println(BulletStyle.Render("└") + TextStyle.Render("API key is required to proceed."))
+			fmt.Println(BulletStyle.Render("└") + TextStyle.Render("An OpenAI API key is required to proceed."))
 			os.Exit(1)
+		}
+
+		err = keyring.Set("tsplice", username, apiKey)
+		if err != nil {
+			fmt.Println("Error saving API key:", err)
+			return
 		}
 
 		os.Setenv("OPENAI_API_KEY", apiKey)
@@ -359,7 +389,7 @@ func main() {
 		}
 
 		// Create list
-		l := list.New(items, itemDelegate{}, 80, 20)
+		l := list.New(items, itemDelegate{}, 64, 16)
 		l.SetShowTitle(false)
 		l.SetShowStatusBar(false)
 		l.SetFilteringEnabled(true)
