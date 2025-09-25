@@ -20,6 +20,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+const VERSION = "1.0.0"
+
 func (i item) FilterValue() string { return i.title }
 
 func (d itemDelegate) Height() int                             { return 2 }
@@ -521,10 +523,12 @@ func main() {
 	var lang string
 	var prompt string
 	var help bool
+	var version bool
 
 	flag.StringVar(&lang, "lang", "auto", "Language for transcription (e.g. en, es, fr)")
 	flag.StringVar(&prompt, "prompt", "", "Optional prompt used to create a more accurate transcription")
 	flag.BoolVar(&help, "help", false, "Show usage info")
+	flag.BoolVar(&version, "version", false, "Show version info")
 	flag.Usage = func() {
 		fmt.Println(BulletStyle.Render("├") + TextStyle.Render("Usage: tsplice [options] <input-file>"))
 		fmt.Println(BulletStyle.Render("│"))
@@ -552,6 +556,11 @@ func main() {
 
 	if help {
 		flag.Usage()
+		os.Exit(0)
+	}
+
+	if version {
+		fmt.Println(BulletStyle.Render("└") + TextStyle.Render(VERSION))
 		os.Exit(0)
 	}
 
