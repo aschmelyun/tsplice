@@ -13,7 +13,6 @@ jobs:
         goos: [linux, windows, darwin]
         goarch: [amd64, arm64]
         exclude:
-          # Exclude Windows ARM64 as it's less common for CLI tools
           - goos: windows
             goarch: arm64
     
@@ -28,15 +27,6 @@ jobs:
     - name: Get dependencies
       run: go mod download
     
-    - name: Set binary name
-      id: binary
-      run: |
-        if [ "${{ matrix.goos }}" = "windows" ]; then
-          echo "name=tsplice.exe" >> $GITHUB_OUTPUT
-        else
-          echo "name=tsplice" >> $GITHUB_OUTPUT
-        fi
-    
     - name: Build binary
       env:
         GOOS: ${{ matrix.goos }}
@@ -46,15 +36,16 @@ jobs:
         if [ "${{ matrix.goos }}" = "windows" ]; then
           binary_name="${binary_name}.exe"
         fi
-        go build -ldflags="-s -w" -o $binary_name .
-        echo "name=$binary_name" >> $GITHUB_OUTPUT
+        go build -ldflags="-s -w" -o "$binary_name" .
+        # Verify it's actually a binary
+        file "$binary_name"
       id: build
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ steps.build.outputs.name }}
-        path: ${{ steps.build.outputs.name }}
+        name: tsplice-${{ matrix.goos }}-${{ matrix.goarch }}
+        path: tsplice-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
 
   release:
     needs: build
@@ -69,6 +60,18 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         path: ./artifacts
+    
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        find ./artifacts -type f -exec cp {} release-assets/ \;
+        ls -lah release-assets/
+        # Verify binaries
+        for file in release-assets/*; do
+          if [[ ! "$file" == *.exe ]]; then
+            file "$file"
+          fi
+        done
     
     - name: Create Release
       run: |
@@ -87,6 +90,6 @@ jobs:
         - **macOS AMD64 (Intel)**: \`tsplice-${{ github.ref_name }}-darwin-amd64\`
         - **macOS ARM64 (Apple Silicon)**: \`tsplice-${{ github.ref_name }}-darwin-arm64\`
         - **Windows AMD64**: \`tsplice-${{ github.ref_name }}-windows-amd64.exe\`" \
-          ./artifacts/*/*
+          release-assets/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

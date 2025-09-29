@@ -18,7 +18,7 @@ import (
 	"golang.org/x/term"
 )
 
-const VERSION = "1.0.1"
+const VERSION = "1.0.2"
 
 func (i item) FilterValue() string { return i.title }
 
