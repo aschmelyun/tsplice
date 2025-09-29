@@ -42,25 +42,19 @@ jobs:
         GOOS: ${{ matrix.goos }}
         GOARCH: ${{ matrix.goarch }}
       run: |
-        go build -ldflags="-s -w" -o ${{ steps.binary.outputs.name }} .
-    
-    - name: Create archive
-      id: archive
-      run: |
+        binary_name="tsplice-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}"
         if [ "${{ matrix.goos }}" = "windows" ]; then
-          archive_name="tsplice-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip"
-          zip $archive_name ${{ steps.binary.outputs.name }}
-        else
-          archive_name="tsplice-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz"
-          tar -czf $archive_name ${{ steps.binary.outputs.name }}
+          binary_name="${binary_name}.exe"
         fi
-        echo "name=$archive_name" >> $GITHUB_OUTPUT
+        go build -ldflags="-s -w" -o $binary_name .
+        echo "name=$binary_name" >> $GITHUB_OUTPUT
+      id: build
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ steps.archive.outputs.name }}
-        path: ${{ steps.archive.outputs.name }}
+        name: ${{ steps.build.outputs.name }}
+        path: ${{ steps.build.outputs.name }}
 
   release:
     needs: build
@@ -88,11 +82,11 @@ jobs:
         
         Choose the appropriate binary for your platform:
         
-        - **Linux AMD64**: \`tsplice-${{ github.ref_name }}-linux-amd64.tar.gz\`
-        - **Linux ARM64**: \`tsplice-${{ github.ref_name }}-linux-arm64.tar.gz\`
-        - **macOS AMD64 (Intel)**: \`tsplice-${{ github.ref_name }}-darwin-amd64.tar.gz\`
-        - **macOS ARM64 (Apple Silicon)**: \`tsplice-${{ github.ref_name }}-darwin-arm64.tar.gz\`
-        - **Windows AMD64**: \`tsplice-${{ github.ref_name }}-windows-amd64.zip\`" \
+        - **Linux AMD64**: \`tsplice-${{ github.ref_name }}-linux-amd64\`
+        - **Linux ARM64**: \`tsplice-${{ github.ref_name }}-linux-arm64\`
+        - **macOS AMD64 (Intel)**: \`tsplice-${{ github.ref_name }}-darwin-amd64\`
+        - **macOS ARM64 (Apple Silicon)**: \`tsplice-${{ github.ref_name }}-darwin-arm64\`
+        - **Windows AMD64**: \`tsplice-${{ github.ref_name }}-windows-amd64.exe\`" \
           ./artifacts/*/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
