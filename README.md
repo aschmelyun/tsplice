@@ -46,6 +46,12 @@ A command using some of these might look like:
 tsplice --gate --lang=fr ./Movies/my_facecam_vid_20250629.mp4
 ```
 
+After running through the initial steps of extracting audio and transcribing with Whisper, you'll be presented with a list of lines from your video's audio that you can toggle to select or deselect.
+
+You can press `p` at any time to see a pop-up preview of that current line using your original video.
+
+Press `c` after you've selected all of the clips that you want in your final video to start the merge process.
+
 At any time, you can get a help screen by running just `tsplice` or `tsplice --help`. You can see the current version installed by running `tsplice --version`. 
 
 ## How it works
