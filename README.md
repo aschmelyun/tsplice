@@ -2,7 +2,9 @@
 
 A modest command-line application to **splice** and merge video files from the **t**erminal.
 
-:construction: This is an experimental app and is being actively developed :construction:
+![](art/screenshot.png)
+
+:construction: This is an experimental app so you might see some weird bugs. If so, [let me know](https://github.com/aschmelyun/tsplice/issues)! :construction:
 
 ## Installation
 
