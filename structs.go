@@ -36,6 +36,7 @@ type model struct {
 	quitting        bool
 	inputFile       string
 	errorMsg        string
+	gate            bool
 	transcriptItems []TranscriptItem
 	statuses        []string
 }

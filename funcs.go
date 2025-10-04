@@ -16,9 +16,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func extractAudioCmd(inputFile string) tea.Cmd {
+func extractAudioCmd(inputFile string, gate bool) tea.Cmd {
 	return func() tea.Msg {
-		audioFile, err := extractAudio(inputFile)
+		audioFile, err := extractAudio(inputFile, gate)
 		if err != nil {
 			return errorMsg{err: err}
 		}
@@ -50,11 +50,19 @@ func transcribeAudioCmd(audioFile string) tea.Cmd {
 	}
 }
 
-func extractAudio(inputFile string) (string, error) {
+func extractAudio(inputFile string, gate bool) (string, error) {
 	basename := strings.TrimSuffix(filepath.Base(inputFile), filepath.Ext(inputFile))
 	audioFile := basename + ".mp3"
 
-	cmd := exec.Command("ffmpeg", "-y", "-i", inputFile, audioFile)
+	args := []string{"-y", "-i", inputFile}
+
+	if gate {
+		args = append(args, "-af", "silenceremove=stop_periods=-1:stop_duration=10:stop_threshold=-50dB")
+	}
+
+	args = append(args, audioFile)
+	cmd := exec.Command("ffmpeg", args...)
+
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("failed to extract audio: %w", err)
 	}

@@ -46,7 +46,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 		}
 	}
 
-	fmt.Fprintf(w, "%s\n%s\n", timestampLine, fn(str))
+	fmt.Fprintf(w, "%s\n%s", timestampLine, fn(str))
 }
 
 func (m model) Init() tea.Cmd {
@@ -54,7 +54,7 @@ func (m model) Init() tea.Cmd {
 		// Start the spinner and begin audio extraction
 		return tea.Batch(
 			m.spinner.Tick,
-			extractAudioCmd(m.inputFile),
+			extractAudioCmd(m.inputFile, m.gate),
 		)
 	}
 	// If not loading, just return nil (no commands to run)
@@ -234,11 +234,13 @@ func main() {
 
 	var lang string
 	var prompt string
+	var gate bool
 	var help bool
 	var version bool
 
 	flag.StringVar(&lang, "lang", "auto", "Language for transcription (e.g. en, es, fr)")
 	flag.StringVar(&prompt, "prompt", "", "Optional prompt used to create a more accurate transcription")
+	flag.BoolVar(&gate, "gate", false, "Remove long periods of silence during audio extraction")
 	flag.BoolVar(&help, "help", false, "Show usage info")
 	flag.BoolVar(&version, "version", false, "Show version info")
 	flag.Usage = func() {
@@ -247,6 +249,7 @@ func main() {
 		fmt.Println(BulletStyle.Render("├") + TextStyle.Render("Options:"))
 		fmt.Println(BulletStyle.Render("├────") + TextStyle.Render("--lang") + DimTextStyle.Render("    language for transcription (e.g. en, es, fr)"))
 		fmt.Println(BulletStyle.Render("├────") + TextStyle.Render("--prompt") + DimTextStyle.Render("  optional prompt used to create a more accurate transcription"))
+		fmt.Println(BulletStyle.Render("├────") + TextStyle.Render("--gate") + DimTextStyle.Render("    remove long periods of silence (>10s) during audio extraction"))
 		fmt.Println(BulletStyle.Render("│"))
 		fmt.Println(BulletStyle.Render("├") + TextStyle.Render("Requirements:"))
 
@@ -361,6 +364,7 @@ func main() {
 		loading:    true,
 		loadingMsg: "Extracting audio with ffmpeg...",
 		inputFile:  inputFile,
+		gate:       gate,
 	}
 
 	// Check if transcript already exists
