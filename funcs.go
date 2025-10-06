@@ -94,14 +94,24 @@ func transcribeWithOpenAI(audioFile string) (string, error) {
 		return "", fmt.Errorf("failed to copy file: %w", err)
 	}
 
-	writer.WriteField("model", "whisper-1")
+	model := os.Getenv("MODEL")
+	if model == "" {
+		model = "whisper-1"
+	}
+
+	writer.WriteField("model", model)
 	writer.WriteField("response_format", "vtt")
 
 	if err := writer.Close(); err != nil {
 		return "", fmt.Errorf("failed to close writer: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/audio/transcriptions", &b)
+	apiUrl := os.Getenv("API_URL")
+	if apiUrl == "" {
+		apiUrl = "https://api.openai.com/v1/audio/transcriptions"
+	}
+
+	req, err := http.NewRequest("POST", apiUrl, &b)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}

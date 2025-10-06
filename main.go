@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/joho/godotenv"
 	"github.com/zalando/go-keyring"
 	"golang.org/x/term"
 )
@@ -50,6 +51,8 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 }
 
 func (m model) Init() tea.Cmd {
+	_ = godotenv.Load()
+
 	if m.loading {
 		// Start the spinner and begin audio extraction
 		return tea.Batch(
@@ -129,6 +132,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case audioExtractedMsg:
 		m.statuses = append(m.statuses, "Audio extracted from ffmpeg.")
 		m.loadingMsg = "Transcribing with OpenAI Whisper..."
+		if os.Getenv("API_URL") != "" {
+			m.loadingMsg = "Transcribing with custom Whisper API..."
+		}
 		return m, transcribeAudioCmd(msg.audioFile)
 
 	case transcriptionDoneMsg:
