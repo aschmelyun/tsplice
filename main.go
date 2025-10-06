@@ -129,6 +129,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case audioExtractedMsg:
 		m.statuses = append(m.statuses, "Audio extracted from ffmpeg.")
 		m.loadingMsg = "Transcribing with OpenAI Whisper..."
+		if os.Getenv("API_URL") != "" {
+			m.loadingMsg = "Transcribing with custom Whisper API..."
+		}
 		return m, transcribeAudioCmd(msg.audioFile)
 
 	case transcriptionDoneMsg:
