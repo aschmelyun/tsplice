@@ -14,7 +14,6 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/joho/godotenv"
 	"github.com/zalando/go-keyring"
 	"golang.org/x/term"
 )
@@ -51,8 +50,6 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list
 }
 
 func (m model) Init() tea.Cmd {
-	_ = godotenv.Load()
-
 	if m.loading {
 		// Start the spinner and begin audio extraction
 		return tea.Batch(
